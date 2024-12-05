@@ -80,6 +80,10 @@ void processInput(GLFWwindow* win, double dt)
         background = { 0.0f, 1.0f, 0.0f, 1.0f };
     if (glfwGetKey(win, GLFW_KEY_3) == GLFW_PRESS)
         background = { 0.0f, 0.0f, 1.0f, 1.0f };
+    if (glfwGetKey(win, GLFW_KEY_4) == GLFW_PRESS)
+        background = { 0.55f, 0.8f, 0.9f, 1.0f };
+    if (glfwGetKey(win, GLFW_KEY_5) == GLFW_PRESS)
+        background = { .0f, .0f, 0.0f, 1.0f };
 
     uint32_t dir = 0;
 
@@ -258,7 +262,7 @@ int main(void)
     }
     };
 
-    const int cube_count = 50;
+    const int cube_count = 200;
 
     ModelTransform cubeTrans[cube_count];
 
@@ -273,6 +277,9 @@ int main(void)
             glm::vec3(scale, scale, scale)
         };
         cubeMat[i] = rand() % 3;
+
+        if ((glm::vec3(0, 0, 0) - cubeTrans[i].position).length() < 0.7)
+            i--;
     };
 
 
@@ -432,6 +439,8 @@ int main(void)
         model = glm::translate(model, lightTrans.position);
         model = glm::scale(model, lightTrans.scale);
 
+        light_shader->setBool("wireframeMode", wireframeMode);
+
         light_shader->use();
         light_shader->setMatrix4F("pv", pv);
         light_shader->setMatrix4F("model", model);
@@ -447,6 +456,7 @@ int main(void)
     }
 
     delete polygon_shader;
+    delete light_shader;
 
     glfwTerminate();
     return 0;
