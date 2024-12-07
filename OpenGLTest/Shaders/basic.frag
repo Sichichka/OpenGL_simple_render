@@ -10,7 +10,12 @@ struct Material
 
 struct Light
 {
+	int type;
+	float cutOff;
+
 	vec3 position;
+	vec3 direction;
+
 	vec3 ambient;
 	vec3 diffuse;
 	vec3 specular;
@@ -30,32 +35,108 @@ uniform sampler2D ourTexture;
 uniform bool wireframeMode;
 
 uniform vec3 viewPos;
-uniform vec3 lightColor;
 uniform Material material;
-uniform Light light;
+
+#define MAX_LIGHTS 4
+uniform int lights_count;
+uniform Light light[MAX_LIGHTS];
+
+float getAtten(int i)
+{
+	float dist = distance(light[i].position, FragPos);
+	float attenuation = 1.0 / (light[i].constant + light[i].linear*dist + light[i].quadratic * dist * dist);
+	return attenuation;
+}
+
+/*float CalcDiffuse(int i, vec3 lightDir)
+{
+	//diffuse
+	vec3 norm = normalize(vertNormal);
+	float diff_koef = max(dot(norm, -lightDir), 0.0f);
+	vec3 diffuse = light[i].diffuse * (diff_koef * material.diffuse) * getAtten(i);
+
+	//specular
+	vec3 reflectDir = reflect(lightDir, norm);
+	vec3 viewDir = normalize(FragPos - viewPos);
+	float spec_koef = pow(max(dot(viewDir, reflectDir), 0.0f), material.shiniess);
+	vec3 specular = light[i].specular * (spec_koef * material.specular) * getAtten(i);
+}*/
 
 void main()
 {	
-	float dist = distance(light.position, FragPos);
-	float attenuation = 1.0 / (light.constant + light.linear*dist + light.quadratic * dist * dist);
-
-	vec3 ambient = light.ambient * material.ambient * attenuation;
-
-	//diffuse
-	vec3 norm = normalize(vertNormal);
-	vec3 lightDir = normalize(FragPos - light.position);
-	float diff_koef = max(dot(norm, -lightDir), 0.0f);
-	vec3 diffuse = light.diffuse * (diff_koef * material.diffuse) * attenuation;
-
-	//specular
-	vec3 reflectDir = reflect(-lightDir, norm);
-	vec3 viewDir = normalize(FragPos - viewPos);
-	float spec_koef = pow(max(dot(viewDir, reflectDir), 0.0f), material.shiniess);
-
-	vec3 specular = light.specular * (spec_koef * material.specular) * attenuation;
-
 	if (wireframeMode)
 		outColor = vec4(vertColor, 1.0f);
 	else
-		outColor = texture(ourTexture, texCoords) * vec4(ambient + diffuse + specular, 1.0f);
+	{
+		outColor = vec4(0, 0, 0, 0);
+		vec3 lresult;
+		for (int i = 0; i < lights_count; i++)
+		{
+			if (light[i].type == 1) // Directional light
+			{
+				vec3 ambient = light[i].ambient * material.ambient;
+				vec3 norm = normalize(vertNormal);
+				vec3 lightDir = -light[i].direction;
+				float diff_koef = max(dot(norm, -lightDir), 0.0f);
+				vec3 diffuse = light[i].diffuse * (diff_koef * material.diffuse);
+
+				vec3 reflectDir = reflect(-lightDir, norm);
+				vec3 viewDir = normalize(FragPos - viewPos);
+				float spec_koef = pow(max(dot(viewDir, reflectDir), 0.0f), material.shiniess);
+
+				vec3 specular = light[i].specular * spec_koef * material.specular; // vec3(0.1f, 0.1f, 0.1f);
+				lresult = 2*ambient + diffuse + specular;
+			}
+			else if (light[i].type == 2) // Point Light
+			{
+
+				vec3 ambient = light[i].ambient * material.ambient * getAtten(i);
+
+				//diffuse
+				vec3 norm = normalize(vertNormal);
+				vec3 lightDir = -normalize(FragPos - light[i].position);
+				float diff_koef = max(dot(norm, -lightDir), 0.0f);
+				vec3 diffuse = light[i].diffuse * (diff_koef * material.diffuse) * getAtten(i);
+
+				//specular
+				vec3 reflectDir = reflect(lightDir, norm);
+				vec3 viewDir = normalize(FragPos - viewPos);
+				float spec_koef = pow(max(dot(viewDir, reflectDir), 0.0f), material.shiniess);
+
+				vec3 specular = light[i].specular * (spec_koef * material.specular) * getAtten(i);
+				lresult = ambient + diffuse + specular;
+			}
+			else if (light[i].type == 3) //Spotlight
+			{
+				vec3 lightDir = -normalize(FragPos - light[i].position);
+				float angle = dot(lightDir, normalize(-light[i].direction));
+
+				if(acos(angle) < light[i].cutOff)
+				{
+
+					vec3 ambient = light[i].ambient * material.ambient * getAtten(i);
+
+					//diffuse
+					vec3 norm = normalize(vertNormal);
+					float diff_koef = max(dot(norm, -lightDir), 0.0f);
+					vec3 diffuse = light[i].diffuse * (diff_koef * material.diffuse) * getAtten(i);
+
+					//specular
+					vec3 reflectDir = reflect(lightDir, norm);
+					vec3 viewDir = normalize(FragPos - viewPos);
+					float spec_koef = pow(max(dot(viewDir, reflectDir), 0.0f), material.shiniess);
+					vec3 specular = light[i].specular * (spec_koef * material.specular) * getAtten(i);
+
+					diffuse *= spec_koef;
+
+					lresult = ambient + diffuse + specular;
+				}
+				else
+				{
+					lresult = material.ambient * light[i].ambient;
+				}
+			}
+			outColor += texture(ourTexture, texCoords) * vec4(lresult, 1.0f);
+		}// end of for
+	}
 }

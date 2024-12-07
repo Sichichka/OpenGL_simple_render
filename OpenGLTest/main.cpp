@@ -39,18 +39,21 @@ struct Material
     float shiniess;
 };
 
-struct DirectionalLight
+enum class LightType 
 {
-    glm::vec3 direction;
-
-    glm::vec3 ambient;
-    glm::vec3 diffuse;
-    glm::vec3 specular;
+    Directional = 1,
+    Point = 2,
+    Spot =3
 };
 
-struct PointLight
+struct Light
 {
+    LightType type;
+
     glm::vec3 position;
+    glm::vec3 direction;
+    float cutOff;
+
     glm::vec3 ambient;
     glm::vec3 diffuse;
     glm::vec3 specular;
@@ -273,7 +276,7 @@ int main(void)
         float scale = (rand() % 6 + 1) / 20.0f;
         cubeTrans[i] = { 
             glm::vec3((rand() % 201 - 100) / 40.0f, (rand() % 201 - 100) / 40.0f, (rand() % 201 - 100) / 40.0f),
-            glm::vec3(rand() / 1000.0f, rand() / 1000.0f, rand() / 1000.0f),
+            glm::vec3(rand() / 10.0f, rand() / 10.0f, rand() / 10.0f),
             glm::vec3(scale, scale, scale)
         };
         cubeMat[i] = rand() % 3;
@@ -367,11 +370,33 @@ int main(void)
 
     double oldTime = glfwGetTime(), newTime, deltaTime;
 
-    PointLight light1 = {    glm::vec3(0.0f, 0.0f, 0.0f),
-                        glm::vec3(0.5f, 0.5f, 0.5f),
-                        glm::vec3(0.8f, 0.8f, 0.8f),
-                        glm::vec3(1.0f, 1.0f, 1.0f),
-                        1.0f, 0.14f, 0.15f };
+    Light lights[10];
+    int lights_count = 3;
+    lights[0].type = LightType::Point;
+    lights[0].position = glm::vec3(0.0f, 0.0f, 0.0f);
+    lights[0].ambient = glm::vec3(0.3f, 0.3f, 0.3f);
+    lights[0].diffuse = glm::vec3(0.8f, 0.8f, 0.8f);
+    lights[0].specular = glm::vec3(1.0f, 1.0f, 1.0f);
+    lights[0].constant = 1.0f;
+    lights[0].linear = 0.1f;
+    lights[0].quadratic = 0.09f;
+
+    lights[1].type = LightType::Directional;
+    lights[1].direction = glm::vec3(-1.0f, -1.0f, -1.0f);
+    lights[1].ambient = glm::vec3(0.3f, 0.3f, 0.3f);
+    lights[1].diffuse = glm::vec3(0.6f, 0.85f, 1.0f);
+    lights[1].specular = glm::vec3(0.0f, 0.0f, 0.0f);
+
+    lights[2].type = LightType::Spot;
+    lights[2].position = glm::vec3(-3.0f, -3.0f, -3.0f);
+    lights[2].direction = glm::vec3(1.0f, 1.0f, 1.0f);
+    lights[2].cutOff = glm::radians(10.0f);
+    lights[2].ambient = glm::vec3(0.3f, 0.3f, 0.3f);
+    lights[2].diffuse = glm::vec3(0.8f, 0.8f, 0.8f);
+    lights[2].specular = glm::vec3(1.0f, 1.0f, 1.0f);
+    lights[2].constant = 1.0f;
+    lights[2].linear = 0.1f;
+    lights[2].quadratic = 0.09f;
 
     while (!glfwWindowShouldClose(win))
     {
@@ -380,6 +405,11 @@ int main(void)
         oldTime = newTime;
 
         processInput(win, deltaTime);
+
+        lightTrans.position = lights[0].position;
+
+        lights[2].position = camera.Position;
+        lights[2].direction = camera.Front;
 
 
         /*light1.specular.r = (sin(glfwGetTime() * 2) + 1);
@@ -400,6 +430,53 @@ int main(void)
 
         glm::mat4 model;
 
+        polygon_shader->use();
+
+        polygon_shader->setMatrix4F("pv", pv);
+        polygon_shader->setBool("wireframeMode", wireframeMode);
+        polygon_shader->setVec3("viewPos", camera.Position);
+
+        polygon_shader->setInt("lights_count", lights_count);
+
+        for (int i = 0; i < lights_count; i++)
+        {
+            std::string num = std::to_string(i);
+            switch (lights[i].type)
+            {
+            case LightType::Directional:
+                polygon_shader->setInt("light[" + num + "].type", int(lights[i].type));
+                polygon_shader->setVec3("light[" + num + "].direction", lights[i].direction);
+                polygon_shader->setVec3("light[" + num + "].ambient", lights[i].ambient);
+                polygon_shader->setVec3("light[" + num + "].diffuse", lights[i].diffuse);
+                polygon_shader->setVec3("light[" + num + "].specular", lights[i].specular);
+                break;
+
+            case LightType::Point:
+                polygon_shader->setInt("light[" + num + "].type", int(lights[i].type));
+                polygon_shader->setVec3("light[" + num + "].position", lights[i].position);
+                polygon_shader->setVec3("light[" + num + "].ambient", lights[i].ambient);
+                polygon_shader->setVec3("light[" + num + "].diffuse", lights[i].diffuse);
+                polygon_shader->setVec3("light[" + num + "].specular", lights[i].specular);
+                polygon_shader->setFloat("light[" + num + "].constant", lights[i].constant);
+                polygon_shader->setFloat("light[" + num + "].linear", lights[i].linear);
+                polygon_shader->setFloat("light[" + num + "].quadratic", lights[i].quadratic);
+                break;
+
+            case LightType::Spot:
+                polygon_shader->setInt("light[" + num + "].type", int(lights[i].type));
+                polygon_shader->setVec3("light[" + num + "].position", lights[i].position);
+                polygon_shader->setVec3("light[" + num + "].direction", lights[i].direction);
+                polygon_shader->setFloat("light[" + num + "].cutOff", lights[i].cutOff);
+                polygon_shader->setVec3("light[" + num + "].ambient", lights[i].ambient);
+                polygon_shader->setVec3("light[" + num + "].diffuse", lights[i].diffuse);
+                polygon_shader->setVec3("light[" + num + "].specular", lights[i].specular);
+                polygon_shader->setFloat("light[" + num + "].constant", lights[i].constant);
+                polygon_shader->setFloat("light[" + num + "].linear", lights[i].linear);
+                polygon_shader->setFloat("light[" + num + "].quadratic", lights[i].quadratic);
+                break;
+            }
+        }
+
         for (int i = 0; i < cube_count; i++)
         {
             model = glm::mat4(1.0f);
@@ -410,19 +487,7 @@ int main(void)
             model = glm::rotate(model, glm::radians(cubeTrans[i].rotation.z), glm::vec3(0.f, 0.f, 1.f));
             model = glm::scale(model, cubeTrans[i].scale);
 
-            polygon_shader->use();
-            polygon_shader->setMatrix4F("pv", pv);
             polygon_shader->setMatrix4F("model", model);
-            polygon_shader->setBool("wireframeMode", wireframeMode);
-            polygon_shader->setVec3("viewPos", camera.Position);
-
-            polygon_shader->setVec3("light.position", light1.position);
-            polygon_shader->setVec3("light.ambient", light1.ambient);
-            polygon_shader->setVec3("light.diffuse", light1.diffuse);
-            polygon_shader->setVec3("light.specular", light1.specular);
-            polygon_shader->setFloat("light.constant", light1.constant);
-            polygon_shader->setFloat("light.linear", light1.linear);
-            polygon_shader->setFloat("light.quadratic", light1.quadratic);
 
             polygon_shader->setVec3("material.ambient", cubeMaterials[cubeMat[i]].ambient);
             polygon_shader->setVec3("material.diffuse", cubeMaterials[cubeMat[i]].diffuse);
@@ -444,10 +509,9 @@ int main(void)
         light_shader->use();
         light_shader->setMatrix4F("pv", pv);
         light_shader->setMatrix4F("model", model);
-        light_shader->setVec3("lightColor", light1.specular);
+        light_shader->setVec3("lightColor", glm::vec3(1.0f, 1.0f, 1.0f));
 
         glBindVertexArray(VAO_polygon);
-        //glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
 
