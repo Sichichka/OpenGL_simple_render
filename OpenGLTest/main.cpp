@@ -154,9 +154,9 @@ int main(void)
 {
 #pragma region WINDOW ITIALIZATION
     glfwInit();
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3); // Установить основную версию OpenGL 3
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3); // Установить второстепенную версию OpenGL 3.3
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); // параметры профиля Opengl
     glfwWindowHint(GLFW_SAMPLES, 8);
 
     GLFWwindow* win = glfwCreateWindow(1280, 720, "OpenGL Window test", NULL, NULL);
@@ -318,6 +318,31 @@ int main(void)
 
 #pragma region BUFFERS INITIALIZATION
 
+    #pragma region SHADOW BUFFER INITIALIZATION
+    GLuint depthMapFBO;
+    glGenFramebuffers(1, &depthMapFBO);
+
+    const unsigned int SHADOW_WIDTH = 1024, SHADOW_HEIGHT = 1024;
+    GLuint depthMap;
+
+    glGenTextures(1, &depthMap);
+    glBindTexture(GL_TEXTURE_2D, depthMap);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    float borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO); 
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap, 0); 
+    glDrawBuffer(GL_NONE); 
+    glReadBuffer(GL_NONE); 
+    glBindFramebuffer(GL_FRAMEBUFFER, 0); 
+
+    #pragma endregion
+
     unsigned int box_texture;
     glGenTextures(1, &box_texture);
 
@@ -367,19 +392,20 @@ int main(void)
 
     Shader* polygon_shader = new Shader("shaders\\basic.vert", "shaders\\basic.frag");
     Shader* light_shader = new Shader("shaders\\light.vert", "shaders\\light.frag");
+    Shader* shadow_shader = new Shader("shaders\\shadow.vert", "shaders\\shadow.frag");
 
     double oldTime = glfwGetTime(), newTime, deltaTime;
 
     Light lights[10];
     int lights_count = 3;
-    lights[0].type = LightType::Point;
+    /*lights[0].type = LightType::Point;
     lights[0].position = glm::vec3(0.0f, 0.0f, 0.0f);
     lights[0].ambient = glm::vec3(0.3f, 0.3f, 0.3f);
     lights[0].diffuse = glm::vec3(0.8f, 0.8f, 0.8f);
     lights[0].specular = glm::vec3(1.0f, 1.0f, 1.0f);
     lights[0].constant = 1.0f;
     lights[0].linear = 0.1f;
-    lights[0].quadratic = 0.09f;
+    lights[0].quadratic = 0.09f;*/
 
     lights[1].type = LightType::Directional;
     lights[1].direction = glm::vec3(-1.0f, -1.0f, -1.0f);
@@ -387,7 +413,7 @@ int main(void)
     lights[1].diffuse = glm::vec3(0.6f, 0.85f, 1.0f);
     lights[1].specular = glm::vec3(0.0f, 0.0f, 0.0f);
 
-    lights[2].type = LightType::Spot;
+    /*lights[2].type = LightType::Spot;
     lights[2].position = glm::vec3(-3.0f, -3.0f, -3.0f);
     lights[2].direction = glm::vec3(1.0f, 1.0f, 1.0f);
     lights[2].cutOff = glm::radians(10.0f);
@@ -396,7 +422,7 @@ int main(void)
     lights[2].specular = glm::vec3(1.0f, 1.0f, 1.0f);
     lights[2].constant = 1.0f;
     lights[2].linear = 0.1f;
-    lights[2].quadratic = 0.09f;
+    lights[2].quadratic = 0.09f;*/
 
     while (!glfwWindowShouldClose(win))
     {
@@ -411,15 +437,6 @@ int main(void)
         lights[2].position = camera.Position;
         lights[2].direction = camera.Front;
 
-
-        /*light1.specular.r = (sin(glfwGetTime() * 2) + 1);
-        light1.specular.g = (sin(glfwGetTime() * 2 + 2 * 3.14159 / 3) + 1 );
-        light1.specular.b = (sin(glfwGetTime() * 2 + 2 * 3.14159 / 3) + 1 );
-
-        light1.diffuse = light1.specular * 0.8f;
-        light1.ambient = light1.specular * 0.4f;*/
-
-
         glClearColor(background.r, background.g, background.b, background.a);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);  
 
@@ -431,6 +448,7 @@ int main(void)
         glm::mat4 model;
 
         polygon_shader->use();
+        
 
         polygon_shader->setMatrix4F("pv", pv);
         polygon_shader->setBool("wireframeMode", wireframeMode);
@@ -438,12 +456,15 @@ int main(void)
 
         polygon_shader->setInt("lights_count", lights_count);
 
+        Light directionalLight;
+
         for (int i = 0; i < lights_count; i++)
         {
             std::string num = std::to_string(i);
             switch (lights[i].type)
             {
             case LightType::Directional:
+                directionalLight = lights[i];
                 polygon_shader->setInt("light[" + num + "].type", int(lights[i].type));
                 polygon_shader->setVec3("light[" + num + "].direction", lights[i].direction);
                 polygon_shader->setVec3("light[" + num + "].ambient", lights[i].ambient);
@@ -477,6 +498,15 @@ int main(void)
             }
         }
 
+        glm::vec3 lightDir = glm::normalize(directionalLight.direction);
+        glm::vec3 lightPos = directionalLight.position * 10.f;
+        glm::mat4 DirectionProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, camera.zNear, camera.zFar);
+        glm::mat4 DirectionView = glm::lookAt(lightPos, lightPos + lightDir, glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::mat4 DirectionPv = DirectionProjection * DirectionView;
+        shadow_shader->setMatrix4F("DirectionPv", DirectionPv);
+        polygon_shader->setMatrix4F("FragPosLightSpace", DirectionPv);
+
+
         for (int i = 0; i < cube_count; i++)
         {
             model = glm::mat4(1.0f);
@@ -499,6 +529,8 @@ int main(void)
             glDrawArrays(GL_TRIANGLES, 0, 36);
         }
 
+
+
         //LIGHT
         model = glm::mat4(1.0f);
         model = glm::translate(model, lightTrans.position);
@@ -513,6 +545,15 @@ int main(void)
 
         glBindVertexArray(VAO_polygon);
         glDrawArrays(GL_TRIANGLES, 0, 36);
+         
+        /*glViewport(0, 0, 1280, 720); 
+        glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO); 
+        glClear(GL_DEPTH_BUFFER_BIT); 
+        shadow_shader->use();
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, depthMap);*/
 
 
         glfwSwapBuffers(win);

@@ -8,12 +8,15 @@ out vec3 vertColor;
 out vec2 texCoords;
 out vec3 vertNormal;
 out vec3 FragPos;
+out vec4 FragPosLightSpace;
 
 uniform mat4 pv;
 uniform mat4 model;
+uniform mat4 DirectionalPv;
 
 void main()
 {
+	FragPosLightSpace = DirectionalPv * vec4(FragPos, 1.0);
 	vec4 vertPos = model * vec4(inPos, 1.0f);
 	gl_Position = pv * vertPos;
 	vertColor = inColors;

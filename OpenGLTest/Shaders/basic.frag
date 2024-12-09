@@ -28,11 +28,13 @@ in vec3 vertColor;
 in vec2 texCoords;
 in vec3 vertNormal;
 in vec3 FragPos;
+in vec4 FragPosLightSpace;
 
 out vec4 outColor;
 
 uniform sampler2D ourTexture;
 uniform bool wireframeMode;
+uniform sampler2D shadowMap;
 
 uniform vec3 viewPos;
 uniform Material material;
@@ -62,18 +64,31 @@ float getAtten(int i)
 	vec3 specular = light[i].specular * (spec_koef * material.specular) * getAtten(i);
 }*/
 
+float ShadowCalculation(vec4 fragPosLightSpace) {
+    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+    projCoords = projCoords * 0.5 + 0.5;
+    float closestDepth = texture(shadowMap, projCoords.xy).r;
+    float currentDepth = projCoords.z;
+
+    float shadow = currentDepth > closestDepth + 0.005 ? 1.0 : 0.0;
+    return shadow;
+}
+
 void main()
 {	
 	if (wireframeMode)
 		outColor = vec4(vertColor, 1.0f);
 	else
 	{
+		//float shadow = ShadowCalculation(FragPosLightSpace);
+		//outColor = vec4(shadow, shadow, shadow, shadow);
 		outColor = vec4(0, 0, 0, 0);
 		vec3 lresult;
 		for (int i = 0; i < lights_count; i++)
 		{
 			if (light[i].type == 1) // Directional light
 			{
+				float shadow = ShadowCalculation(FragPosLightSpace);
 				vec3 ambient = light[i].ambient * material.ambient;
 				vec3 norm = normalize(vertNormal);
 				vec3 lightDir = -light[i].direction;
@@ -85,7 +100,7 @@ void main()
 				float spec_koef = pow(max(dot(viewDir, reflectDir), 0.0f), material.shiniess);
 
 				vec3 specular = light[i].specular * spec_koef * material.specular; // vec3(0.1f, 0.1f, 0.1f);
-				lresult = 2*ambient + diffuse + specular;
+				lresult = 1.5*ambient + diffuse + specular - shadow;
 			}
 			else if (light[i].type == 2) // Point Light
 			{
